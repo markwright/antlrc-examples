@@ -1,12 +1,47 @@
 /* Copyright (c)2010-2011, Mark Wright.  All rights reserved. */
 
 #include <stdio.h>
+
+#if defined(__sun) && defined(__SVR4)
 #include <ucontext.h>
+#else
+#if defined(__linux__)
+#include <execinfo.h>
+#endif
+#endif
 
 #include "Semantic_stub.h"
 #include "SemanticActions.h"
 #include "FullUntypedLexer.h"
 #include "FullUntypedParser.h"
+
+#if defined(__sun) && defined(__SVR4)
+void print_stack()
+{
+  printstack(fileno(stdout));
+}
+#else
+#if defined(__linux__)
+void print_stack()
+{
+  const int max_stack_frames = 100;
+  void* tracePtrs[max_stack_frames];
+  int count = backtrace(tracePtrs, max_stack_frames);
+  char** funcNames = backtrace_symbols(tracePtrs, count);
+
+  // Print the stack trace
+  for( int ii = 0; ii < count; ii++)
+    printf( "%s\n", funcNames[ii]);
+
+  // Free the string pointers
+  free(funcNames);
+}
+#else
+void print_stack()
+{
+}
+#endif
+#endif
 
 void semanticActionsDefaultContructor(SemanticActions *self)
 {
@@ -53,13 +88,13 @@ bool logDSP(SemanticActions *self, bool answer, pANTLR3_TOKEN_STREAM input, cons
   const char *cachedStackString = (cached ? "(cached) " : "");
   printf("%s %s %s %s\n", tokenInfo, methodName, (answer ? "true" : "false"), cachedStackString);
   if (self->logDSPStackTrace)
-    printstack(fileno(stdout));
+    print_stack();
   return answer;
 }
 
-void _saEvaluate(SemanticActions *self, HsStablePtr t)
+void _saEvaluate(SemanticActions *self, HsStablePtr ctx, HsStablePtr t)
 {
-  saEvaluate(t);
+  saEvaluate(ctx, t);
 }
 
 HsStablePtr _saDeclarationListNew(SemanticActions *self);
@@ -136,19 +171,19 @@ HsStablePtr _saFalse(SemanticActions *self, pANTLR3_COMMON_TOKEN falseToken)
 
 HsStablePtr _saLcid(SemanticActions *self, pANTLR3_COMMON_TOKEN lcidToken)
 {
-  return saLcid(intVToken);
+  return saLcid(lcidToken);
 }
 
 HsStablePtr _saFieldsInCurlyBraces(SemanticActions *self, pANTLR3_COMMON_TOKEN leftCurlyToken, HsStablePtr fields);
 
 HsStablePtr _saFloatV(SemanticActions *self, pANTLR3_COMMON_TOKEN floatVToken)
 {
-  return saFloatV(intVToken);
+  return saFloatV(floatVToken);
 }
 
 HsStablePtr _saStringV(SemanticActions *self, pANTLR3_COMMON_TOKEN stringVToken)
 {
-  return saStringV(intVToken);
+  return saStringV(stringVToken);
 }
 
 HsStablePtr _saIntV(SemanticActions *self, pANTLR3_COMMON_TOKEN intVToken)
@@ -168,7 +203,7 @@ HsStablePtr _saFieldListAppend(SemanticActions *self, HsStablePtr fs, HsStablePt
 
 HsStablePtr _saLcidEqTerm(SemanticActions *self, pANTLR3_COMMON_TOKEN lcidToken, HsStablePtr termFunc)
 {
-  return saLcidTerm(lcidToken, termFunc);
+  return saLcidEqTerm(lcidToken, termFunc);
 }
 
 HsStablePtr _saFieldTerm(SemanticActions *self, HsStablePtr termFunc)

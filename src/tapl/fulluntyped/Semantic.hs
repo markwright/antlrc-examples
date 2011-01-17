@@ -1,6 +1,6 @@
 -- Copyright (c)2010-2011, Mark Wright.  All rights reserved.
 
-{-# LANGUAGE DeriveDataTypeable, ExistentialQuantification, ScopedTypeVariables #-}
+{-# LANGUAGE ForeignFunctionInterface, DeriveDataTypeable, ExistentialQuantification, ScopedTypeVariables #-}
 
 module Semantic where
 
@@ -53,6 +53,7 @@ data Info =
   deriving (Show)
 
 type TermInfo = Term Info
+type ContextInfo = Context Info
 
 dummyInfo :: Info
 dummyInfo = Info 0 0
@@ -341,51 +342,55 @@ isval (TmFalse _) = True
 isval t | isnumericval t = True
 isval _ = False
 
-eval1 :: TermInfo -> Maybe TermInfo
-eval1 (TmIf _ (TmTrue _) t2 t3) = Just t2
-eval1 (TmIf _ (TmFalse _) t2 t3) = Just t3
-eval1 (TmIf fi t1 t2 t3) =
+eval1 :: ContextInfo -> TermInfo -> Maybe TermInfo
+eval1 ctx (TmIf _ (TmTrue _) t2 t3) = Just t2
+eval1 ctx (TmIf _ (TmFalse _) t2 t3) = Just t3
+eval1 ctx (TmIf fi t1 t2 t3) =
   maybe Nothing f t1'
   where
-  t1' = eval1 t1
+  t1' = eval1 ctx t1
   f :: TermInfo -> Maybe TermInfo
   f t1'' = Just (TmIf fi t1'' t2 t3)
-eval1 (TmSucc fi t1) =
+eval1 ctx (TmSucc fi t1) =
   maybe Nothing f t1'
   where
-  t1' = eval1 t1
+  t1' = eval1 ctx t1
   f :: TermInfo -> Maybe TermInfo
   f t1'' = Just (TmSucc fi t1'')
-eval1 (TmPred _ (TmZero i)) = Just (TmZero i)
-eval1 (TmPred _ (TmSucc _ nv1)) | isnumericval nv1 = Just nv1
-eval1 (TmPred fi t1) = 
+eval1 ctx (TmPred _ (TmZero i)) = Just (TmZero i)
+eval1 ctx (TmPred _ (TmSucc _ nv1)) | isnumericval nv1 = Just nv1
+eval1 ctx (TmPred fi t1) = 
   maybe Nothing f t1'
   where
-  t1' = eval1 t1
+  t1' = eval1 ctx t1
   f :: TermInfo -> Maybe TermInfo
   f t1'' = Just (TmPred fi t1'')
-eval1 (TmIsZero _ (TmZero i)) = Just (TmTrue i)
-eval1 (TmIsZero _ (TmSucc i nv1)) | isnumericval nv1 = Just (TmFalse i)
-eval1 (TmIsZero fi t1) =
+eval1 ctx (TmIsZero _ (TmZero i)) = Just (TmTrue i)
+eval1 ctx (TmIsZero _ (TmSucc i nv1)) | isnumericval nv1 = Just (TmFalse i)
+eval1 ctx (TmIsZero fi t1) =
   maybe Nothing f t1'
   where
-  t1' = eval1 t1
+  t1' = eval1 ctx t1
   f :: TermInfo -> Maybe TermInfo
   f t1'' = Just (TmIsZero fi t1'')
-eval1 _ = Nothing
+eval1 _ _ = Nothing
 
-eval :: TermInfo -> TermInfo
-eval t = maybe t eval t'
-  where t' = eval1 t
+eval :: ContextInfo -> TermInfo -> TermInfo
+eval ctx t = maybe t eval' t'
+  where t' = eval1 ctx t
+        eval' :: TermInfo -> TermInfo
+        eval' = eval ctx
 
--- foreign export ccall saEvaluate :: StablePtr TermInfo -> IO ()
--- saEvaluate s =
---   do
---     t <- deRefStablePtr s
---     freeStablePtr s
---     catch  
---       ((print . render . printtm . eval) t)
---       (\(e::NoRuleApplies) -> print e)
+foreign export ccall saEvaluate :: StablePtr ContextInfo -> StablePtr TermInfo -> IO ()
+saEvaluate c s =
+  do
+    ctx <- deRefStablePtr c
+    freeStablePtr c
+    t <- deRefStablePtr s
+    freeStablePtr s
+    catch  
+      (print (render ((printtm ctx (eval ctx t)))))
+      (\(e::NoRuleApplies) -> print e)
 
 --------------------------------------------------------------------------------
 -- evaluation exiting recursion by throwing an exception
@@ -396,32 +401,32 @@ eval t = maybe t eval t'
 -- succ 0;
 --------------------------------------------------------------------------------
 
-eval1Ex :: TermInfo -> TermInfo
-eval1Ex (TmIf _ (TmTrue _) t2 t3) = t2
-eval1Ex (TmIf _ (TmFalse _) t2 t3) = t3
-eval1Ex (TmIf fi t1 t2 t3) =
-  let t1' = eval1Ex t1 in
+eval1Ex :: ContextInfo -> TermInfo -> TermInfo
+eval1Ex ctx (TmIf _ (TmTrue _) t2 t3) = t2
+eval1Ex ctx (TmIf _ (TmFalse _) t2 t3) = t3
+eval1Ex ctx (TmIf fi t1 t2 t3) =
+  let t1' = eval1Ex ctx t1 in
   TmIf fi t1' t2 t3
-eval1Ex (TmSucc fi t1) =
-  let t1' = eval1Ex t1 in
+eval1Ex ctx (TmSucc fi t1) =
+  let t1' = eval1Ex ctx t1 in
   TmSucc fi t1'
-eval1Ex (TmPred _ (TmZero i)) = TmZero i
-eval1Ex (TmPred _ (TmSucc _ nv1)) | isnumericval nv1 = nv1
-eval1Ex (TmPred fi t1) = 
-  let t1' = eval1Ex t1 in
+eval1Ex ctx (TmPred _ (TmZero i)) = TmZero i
+eval1Ex ctx (TmPred _ (TmSucc _ nv1)) | isnumericval nv1 = nv1
+eval1Ex ctx (TmPred fi t1) = 
+  let t1' = eval1Ex ctx t1 in
   TmPred fi t1'
-eval1Ex (TmIsZero _ (TmZero i)) = TmTrue i
-eval1Ex (TmIsZero _ (TmSucc i nv1)) | isnumericval nv1 = TmFalse i
-eval1Ex (TmIsZero fi t1) =
-  let t1' = eval1Ex t1 in
+eval1Ex ctx (TmIsZero _ (TmZero i)) = TmTrue i
+eval1Ex ctx (TmIsZero _ (TmSucc i nv1)) | isnumericval nv1 = TmFalse i
+eval1Ex ctx (TmIsZero fi t1) =
+  let t1' = eval1Ex ctx t1 in
   TmIsZero fi t1'
-eval1Ex _ = throw NoRuleApplies
+eval1Ex ctx _ = throw NoRuleApplies
 
-evalEx :: TermInfo -> IO TermInfo
-evalEx t =
+evalEx :: ContextInfo -> TermInfo -> IO TermInfo
+evalEx ctx t =
   catch  
-  (let t' = eval1Ex t
-   in seq t' (evalEx t')
+  (let t' = eval1Ex ctx t
+   in seq t' (evalEx ctx t')
   )
   (\(e::NoRuleApplies) -> return t)
 
@@ -540,7 +545,7 @@ saLcid token =
           i = Info l c
      in
       newStablePtr f
-      
+    
 
 -- | { A simple approach to handling errors is to fold the field list into
 -- a Maybe String which is either Nothing if there are no Left String errors
@@ -552,7 +557,6 @@ saLcid token =
 --   IO (StablePtr (Context Info -> Either String (Term Info)))
 -- saFieldsInCurlyBraces leftCurlyToken fs =
 --   do
-    
 
 foreign export ccall saIntV :: 
   Ptr CommonToken -> 
@@ -595,6 +599,7 @@ saFieldListNew f1 =
       in 
       newStablePtr f
 
+
 -- | append f2 to field list fs in: f1=field (COMMA f2=field)*
 foreign export ccall saFieldListAppend :: 
   StablePtr (Context Info -> Int -> [(String, (Either String (Term Info), Context Info))]) ->   -- field list function
@@ -611,6 +616,7 @@ saFieldListAppend fs f2 =
       f ctx i = (fs' ctx i) ++ (f2' ctx (i+1))
       in
       newStablePtr f
+
 
 -- | Field : LCID EQ Term
 foreign export ccall saLcidEqTerm ::
@@ -630,6 +636,7 @@ saLcidEqTerm token t =
       in
       newStablePtr f
 
+
 -- | Field : Term
 foreign export ccall saFieldTerm :: 
   StablePtr (Context Info -> (Either String (Term Info), Context Info)) ->                      -- term function
@@ -644,3 +651,50 @@ saFieldTerm t =
       in
       newStablePtr f
 
+foreign export ccall saFloatV :: 
+  Ptr CommonToken -> 
+  IO (StablePtr (Context Info -> Either String (Term Info)))
+saFloatV token =
+  do
+    -- read the FloatV floating point value from the token text into n
+    t <- tokenGetText token
+    n <- readIO t
+    -- obtain the source code line and charPosition from the token
+    l <- tokenGetLine token
+    c <- tokenGetCharPositionInLine token
+    -- return the term, which is TmFloat
+    let
+      f :: Context Info -> Term Info
+      f ctx =
+        let
+          floatV :: Float -> Term Info
+          floatV n' = TmFloat i n
+            where i = Info l c
+        in
+          floatV n
+     in
+      newStablePtr (Right . f)
+
+foreign export ccall saStringV :: 
+  Ptr CommonToken -> 
+  IO (StablePtr (Context Info -> Either String (Term Info)))
+saStringV token =
+  do
+    -- read the StringV string value from the token text into n
+    t <- tokenGetText token
+    s <- readIO t
+    -- obtain the source code line and charPosition from the token
+    l <- tokenGetLine token
+    c <- tokenGetCharPositionInLine token
+    -- return the term, which is TmString
+    let
+      f :: Context Info -> Term Info
+      f ctx =
+        let
+          stringV :: String -> Term Info
+          stringV n' = TmString i s
+            where i = Info l c
+        in
+          stringV s
+     in
+      newStablePtr (Right . f)

@@ -10,6 +10,26 @@ provided by ANTLR:
 
 http://www.antlr.org/jira/browse/ANTLR-369
 
-There is currently no build system.  I may try to create one using
-autotools, and assuming that the user has created an antlr script
-file in the users path to run the antlr parser generator.
+(3) It seems difficult to find a portable method to build a C program that calls Haskell.
+
+I provide some example makefiles, however they would need to be modified
+for your system.
+
+src/tapl/arith
+--------------
+
+I wrote this Haskell/C/ANTLR example based on the arith example from the book
+Types and Programming Languages by Benjamin Pierce chapter 4.
+
+(ghc7) argus% ./arith test.f
+"true"
+"false"
+"0"
+"1"
+"false"
+(ghc7) argus% 
+
+src/tapl/fullarith
+------------------
+
+This example is incomplete.
