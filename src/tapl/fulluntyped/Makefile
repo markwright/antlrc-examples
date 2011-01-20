@@ -15,7 +15,7 @@ HS_OBJECT_FILES=C2HS.o Semantic.o FullUntypedInterface.o
 fulluntyped:	$(C_SOURCE_FILES) $(HS_OBJECT_FILES)
 	$(HC) $(HC_FLAGS) --make -o fulluntyped $(HS_OBJECT_FILES) $(C_SOURCE_FILES) -lantlr3c \
 	-L/usr/lib64/ghc-7.0.1/pretty-1.0.1.2 -lHSpretty-1.0.1.2 \
-	-L/usr/lib64/antlrc-9999/ghc-7.0.1 -lHSantlrc-0.0.1 \
+	-L/usr/lib64/antlrc-9999/ghc-7.0.1 -lHSantlrc-0.0.2 \
 	-L/usr/lib64/ghc-7.0.1/haskell98-1.1.0.0 -lHShaskell98-1.1.0.0
 
 FullUntypedTokens.h: FullUntyped.tokens
@@ -55,4 +55,4 @@ lexerc.o:	lexerc.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c lexerc.c
 
 clean:
-	rm *.o FullUntypedLexer.c FullUntypedParser.c
+	rm -f *.o FullUntypedLexer.c FullUntypedParser.c FullUntypedTokens.h

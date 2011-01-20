@@ -1,3 +1,5 @@
+/* Copyright (c)2010-2011, Mark Wright.  All rights reserved. */
+
 grammar Arith;
 
 options {
